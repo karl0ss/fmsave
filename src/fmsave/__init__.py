@@ -96,6 +96,14 @@ from fmsave.models.rules import (
     TransferWindow,
 )
 from fmsave.models.season_stats import PlayerSeasonStats, SeasonStatsKind
+from fmsave.models.squad_rules import (
+    SquadRule,
+    SquadRuleBound,
+    SquadRuleKind,
+    SquadRuleMatch,
+    SquadRuleMatchKind,
+    SquadRuleSet,
+)
 from fmsave.models.stadiums import Stadium
 from fmsave.models.staff import Staff, StaffAttributes, StaffList, StaffPreferences
 from fmsave.models.suspensions import PlayerSuspension, Suspension, SuspensionScope
@@ -204,6 +212,12 @@ __all__ = [
     "SetPieceRoutine",
     "SponsorType",
     "Sponsorship",
+    "SquadRule",
+    "SquadRuleBound",
+    "SquadRuleKind",
+    "SquadRuleMatch",
+    "SquadRuleMatchKind",
+    "SquadRuleSet",
     "SquadStatus",
     "Stadium",
     "Staff",

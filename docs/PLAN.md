@@ -114,6 +114,14 @@ validated against the k-world yearly reports (seasons 1–9) and screenshots.
       spell row shape in `tc_manager_history_dt` (only open spells decode
       today) and pin its person-reference encoding (not uid, not hof pid).
 
+## Owner requests outside the career report
+
+- [x] **Squad registration rules (2026-10-25)** for the owner's transfer-target tool:
+      `Save.squad_rules()` / `Save.competition_squad_rules(database_id)` — per-league foreign,
+      non-EU, home-grown and squad-size rules, linked to competitions through the nation's
+      division levels. Open: most rule codes unlabelled; a nations reader (EU membership,
+      work permits) to say who counts as foreign/non-EU. See `docs/history-re.md`.
+
 ## Parked / closed (do not redo)
 
 - Transfer fees: **FOUND and integrated (2026-10-10)** — per player in

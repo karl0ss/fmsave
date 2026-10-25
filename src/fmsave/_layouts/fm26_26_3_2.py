@@ -35,6 +35,7 @@ from fmsave._layouts import (
     SaveSummaryLayout,
     SeasonStatsLayout,
     SponsorChainLayout,
+    SquadRuleLayout,
     StadiumTableLayout,
     StaffLayout,
     StageResultLayout,
@@ -1122,6 +1123,67 @@ TAGGED_STREAM = TaggedStreamLayout(
     max_string_bytes=4096,
 )
 
+# The squad rules share the stream with the transfer windows but need the value sizes the
+# window walk never meets: 0x03 is one byte, not four, 0x0F is two u32s (an id and its
+# database id) and 0x19 a float. With these sizes every rule-set list and every division list
+# on a fresh 2025/26 database and on a 14-season one reads whole, and every list governing
+# division levels pairs with its nation's division list. The two binary-tagged forms of the
+# nation id (a bare u16, or a record with a u16) both occur.
+SQUAD_RULES = SquadRuleLayout(
+    tag_bytes=4,
+    separator_value=0x01,
+    value_bytes=(
+        (0x00, 0),
+        (0x03, 1),
+        (0x11, 1),
+        (0x12, 2),
+        (0x01, 4),
+        (0x02, 4),
+        (0x20, 4),
+        (0x0F, 8),
+        (0x18, 8),
+        # An older database build writes ids with compact types: 0x13 one byte (the Premier
+        # League's 11), 0x15 four (the National League's 109201); 0x14 completes the series.
+        (0x13, 1),
+        (0x14, 2),
+        (0x15, 4),
+        (0x19, 4),
+    ),
+    pair_type=0x0F,
+    float_type=0x19,
+    string_type=0x1A,
+    record_type=0x0A,
+    array_type=0x0B,
+    max_string_bytes=4096,
+    max_count=100_000,
+    set_list_tag=b"lrxf\x01\x0b",
+    division_list_tag=b"vlvd\x01\x0b",
+    name_tag="name",
+    highest_level_tag="hidl",
+    lowest_level_tag="lwdl",
+    competition_tag="comp",
+    database_id_tag="DBID",
+    rules_tag="sqsr",
+    kind_tag="type",
+    bound_tag="cmty",
+    value_tag="valu",
+    first_season_tag="styr",
+    last_season_tag="enyr",
+    flags_tag="info",
+    cash_tag="cash",
+    currency_tag="curr",
+    nation_tag="nati",
+    nation_id_tag="Nnat",
+    team_counts_tag="retm",
+    group_count_tag="nccc",
+    open_level=255,
+    # A nation's division list sits within about 11 KB after its rule sets on the saves
+    # measured; the walk stops at the first byte that is not a value long before this.
+    forward_scan_bytes=400_000,
+    # The nation value right before a division list is 8 to 34 bytes long when numeric.
+    nation_search_bytes=64,
+)
+
 # A window record opens with its `stdt` sub-list, so the marker is that list's stored bytes.
 # The saves measured agree exactly on how many start-date sub-lists the stream holds, on which
 # of them also carry a closing time and decode into a window, and that none of those is
@@ -1516,6 +1578,9 @@ GATE_BOUNDS = GateBounds(
     affiliate_members_resolved=(0.95, None),
     # 0.95 on a Turkish 2025/26 career; a block head read one byte out places almost none.
     club_colour_lists_placed=(0.85, None),
+    # 1.00 on a fresh 2025/26 database and on a 14-season one built on an older database; a
+    # value size read wrong stops the walks short and pairs almost none.
+    squad_rule_lists_paired=(0.90, None),
     # Tens to low hundreds of records on the saves measured. The threshold is not a bound on
     # the feed's size: it is how small a feed the shares below stop being judged on, because a
     # short feed is a fact about a quiet job market, not about the reader.
@@ -1800,6 +1865,7 @@ LAYOUTS: tuple[LayoutEntry, ...] = (
     LayoutEntry(region="game_db", schema=4000, build=BUILD, layout=TEAM_LISTS),
     LayoutEntry(region="game_db", schema=4000, build=BUILD, layout=CLUB_STATUSES),
     LayoutEntry(region="game_db", schema=4000, build=BUILD, layout=CLUB_COLOURS),
+    LayoutEntry(region="game_db", schema=4000, build=BUILD, layout=SQUAD_RULES),
     LayoutEntry(region="game_db", schema=4000, build=BUILD, layout=PLAYER_RECORDS),
     LayoutEntry(region="game_db", schema=4000, build=BUILD, layout=PERSON_BLOCKS),
     LayoutEntry(region="game_db", schema=4000, build=BUILD, layout=CONTRACTS),

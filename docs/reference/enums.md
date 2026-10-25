@@ -53,6 +53,12 @@ label, and the status types that say whether a field's meaning is verified.
    :members:
 .. autoclass:: fmsave.SponsorType
    :members:
+.. autoclass:: fmsave.SquadRuleBound
+   :members:
+.. autoclass:: fmsave.SquadRuleKind
+   :members:
+.. autoclass:: fmsave.SquadRuleMatchKind
+   :members:
 .. autoclass:: fmsave.SquadStatus
    :members:
 .. autoclass:: fmsave.SuspensionScope

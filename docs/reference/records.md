@@ -47,7 +47,8 @@ their own pages: see {doc}`table` and {doc}`enums`.
 ## Competitions
 
 `stages()`, `competitions()`, `fixtures()`, `league_tables()`, `transfer_windows()`,
-`competition_rules()` and `player_match_stats()`.
+`competition_rules()`, `squad_rules()` (and `competition_squad_rules(database_id)`) and
+`player_match_stats()`.
 
 ```{eval-rst}
 .. autoclass:: fmsave.Stage
@@ -60,6 +61,11 @@ their own pages: see {doc}`table` and {doc}`enums`.
 .. autoclass:: fmsave.TransferWindow
 .. autoclass:: fmsave.CompetitionRules
 .. autoclass:: fmsave.RulesRound
+.. autoclass:: fmsave.SquadRuleSet
+   :members: rules_in
+.. autoclass:: fmsave.SquadRule
+   :members: applies_in
+.. autoclass:: fmsave.SquadRuleMatch
 .. autoclass:: fmsave.PlayerMatchStats
 ```
 

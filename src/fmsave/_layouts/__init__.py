@@ -234,6 +234,75 @@ class ClubColourLayout:
 
 
 @dataclass(frozen=True, slots=True)
+class SquadRuleLayout:
+    """How the squad registration rules sit in the rules database's tagged stream in `game_db`.
+
+    A value is `<tag_bytes-byte tag, byte-reversed><separator_value><type><value>`. The tag can
+    be binary rather than letters. `value_bytes` pairs each fixed-size type with its size;
+    `pair_type` is the 8-byte type holding two u32s, the second a database id, and
+    `float_type` the 4-byte float. `string_type`
+    is a u32 length, at most `max_string_bytes`, and UTF-8. `record_type` opens a record of a
+    u32 count of tagged values and `array_type` an array of a u32 count of untagged elements,
+    each `<separator_value><type><value>`; a count above `max_count` ends the read.
+
+    **A nation's rule sets** are an array tagged `set_list_tag` whose elements are records:
+    `name_tag`, the division range `highest_level_tag` / `lowest_level_tag` (`open_level` as
+    the lowest means every level down), an optional `competition_tag`, and the rules array
+    `rules_tag`. A rule is a record: `kind_tag`, `bound_tag`, `value_tag`, the season range
+    `first_season_tag` / `last_season_tag`, the flags array `flags_tag`, and `cash_tag` and
+    `currency_tag` for a money rule. `set_list_tag` also tags plain id values in competition
+    files, which is why only an array of records is a rule-set list.
+
+    **The nation's division levels** are an array tagged `division_list_tag`, element i the
+    competition at level i (`competition_tag`, as a value or as a record holding it or
+    `database_id_tag`) and `group_count_tag` when the level is split into groups. The value
+    stored right before it, `nation_tag`, holds the nation id as a u16 or as a record with a
+    u16 `nation_id_tag`; the value stored right after it, `team_counts_tag`, lists the nation's
+    competitions in an order where a split level's groups follow it.
+
+    **A rule-set list belongs to the division list in its own run of tagged values.** Neither
+    the file names nor the nation ids line up across database builds, but the list and its
+    nation's division list are always in one unbroken run: the reader walks forward from the
+    list's end for at most `forward_scan_bytes` and takes the first division list it meets, and
+    failing that takes the nearest division list before it whose run reaches the list.
+    """
+
+    tag_bytes: int
+    separator_value: int
+    value_bytes: tuple[tuple[int, int], ...]
+    pair_type: int
+    float_type: int
+    string_type: int
+    record_type: int
+    array_type: int
+    max_string_bytes: int
+    max_count: int
+    set_list_tag: bytes
+    division_list_tag: bytes
+    name_tag: str
+    highest_level_tag: str
+    lowest_level_tag: str
+    competition_tag: str
+    database_id_tag: str
+    rules_tag: str
+    kind_tag: str
+    bound_tag: str
+    value_tag: str
+    first_season_tag: str
+    last_season_tag: str
+    flags_tag: str
+    cash_tag: str
+    currency_tag: str
+    nation_tag: str
+    nation_id_tag: str
+    team_counts_tag: str
+    group_count_tag: str
+    open_level: int
+    forward_scan_bytes: int
+    nation_search_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
 class FinanceChainLayout:
     """How to find a club's chain of monthly finance snapshots inside its own record.
 
@@ -2061,6 +2130,9 @@ class GateBounds:
 
     Club colours: `club_colour_lists_placed` (kit lists the walk ties to a club).
 
+    Squad rules: `squad_rule_lists_paired` (rule-set lists governing division levels that are
+    tied to their nation's division levels).
+
     Affiliate groups: `affiliate_members_resolved` (group members the public club index names,
     of group members). It applies on a full-size `game_db` **and** only when a group holds a
     member at all, because a save whose section stores no group has no member to resolve and
@@ -2243,6 +2315,7 @@ class GateBounds:
     facility_clubs_minimum: BoundPair
     affiliate_members_resolved: BoundPair
     club_colour_lists_placed: BoundPair
+    squad_rule_lists_paired: BoundPair
     job_vacancy_minimum_applies_from_records: int
     job_vacancy_tag: BoundPair
     job_vacancy_dates_ordered: BoundPair
@@ -2293,6 +2366,7 @@ type Layout = (
     | TeamListLayout
     | ClubStatusLayout
     | ClubColourLayout
+    | SquadRuleLayout
     | PlayerRecordLayout
     | PersonBlockLayout
     | ContractLayout

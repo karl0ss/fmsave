@@ -170,6 +170,99 @@
     dict({
       'build': '26.3.2+2329565',
       'layout': dict({
+        'array_type': 11,
+        'bound_tag': 'cmty',
+        'cash_tag': 'cash',
+        'competition_tag': 'comp',
+        'currency_tag': 'curr',
+        'database_id_tag': 'DBID',
+        'division_list_tag': b'vlvd\x01\x0b',
+        'first_season_tag': 'styr',
+        'flags_tag': 'info',
+        'float_type': 25,
+        'forward_scan_bytes': 400000,
+        'group_count_tag': 'nccc',
+        'highest_level_tag': 'hidl',
+        'kind_tag': 'type',
+        'last_season_tag': 'enyr',
+        'lowest_level_tag': 'lwdl',
+        'max_count': 100000,
+        'max_string_bytes': 4096,
+        'name_tag': 'name',
+        'nation_id_tag': 'Nnat',
+        'nation_search_bytes': 64,
+        'nation_tag': 'nati',
+        'open_level': 255,
+        'pair_type': 15,
+        'record_type': 10,
+        'rules_tag': 'sqsr',
+        'separator_value': 1,
+        'set_list_tag': b'lrxf\x01\x0b',
+        'string_type': 26,
+        'tag_bytes': 4,
+        'team_counts_tag': 'retm',
+        'value_bytes': tuple(
+          tuple(
+            0,
+            0,
+          ),
+          tuple(
+            3,
+            1,
+          ),
+          tuple(
+            17,
+            1,
+          ),
+          tuple(
+            18,
+            2,
+          ),
+          tuple(
+            1,
+            4,
+          ),
+          tuple(
+            2,
+            4,
+          ),
+          tuple(
+            32,
+            4,
+          ),
+          tuple(
+            15,
+            8,
+          ),
+          tuple(
+            24,
+            8,
+          ),
+          tuple(
+            19,
+            1,
+          ),
+          tuple(
+            20,
+            2,
+          ),
+          tuple(
+            21,
+            4,
+          ),
+          tuple(
+            25,
+            4,
+          ),
+        ),
+        'value_tag': 'valu',
+      }),
+      'region': 'game_db',
+      'schema': 4000,
+    }),
+    dict({
+      'build': '26.3.2+2329565',
+      'layout': dict({
         'allocated_uid_minimum': 2000000000,
         'attribute_count': 54,
         'attribute_field_order': tuple(
@@ -2354,6 +2447,10 @@
         'span_minimum_applies_from_bytes': 16777216,
         'sponsor_clubs_minimum': tuple(
           1,
+          None,
+        ),
+        'squad_rule_lists_paired': tuple(
+          0.9,
           None,
         ),
         'stadium_capacity_within_all_seater': tuple(

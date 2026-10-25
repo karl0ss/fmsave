@@ -58,6 +58,7 @@ from fmsave.models.player_stats_history import PlayerHistoryStats
 from fmsave.models.players import Player
 from fmsave.models.rules import CompetitionRules, TransferWindow
 from fmsave.models.season_stats import PlayerSeasonStats
+from fmsave.models.squad_rules import SquadRuleMatch, SquadRuleSet
 from fmsave.models.stadiums import Stadium
 from fmsave.models.staff import Staff, StaffList
 from fmsave.models.suspensions import Suspension
@@ -179,6 +180,11 @@ from fmsave.readers.season_stats import (
     read_season_stats_section,
 )
 from fmsave.readers.span import SPAN_RECORDS_CACHE_KEY, SpanRecords
+from fmsave.readers.squad_rules import (
+    find_squad_rule_layout,
+    match_competition,
+    read_squad_rules,
+)
 from fmsave.readers.stadiums import (
     StadiumIndex,
     build_stadiums,
@@ -239,6 +245,7 @@ SPONSORSHIPS_TABLE_CACHE_KEY = "table:sponsorships"
 FACILITIES_TABLE_CACHE_KEY = "table:facilities"
 AFFILIATES_TABLE_CACHE_KEY = "table:affiliates"
 CLUB_COLOURS_TABLE_CACHE_KEY = "table:club_colours"
+SQUAD_RULES_TABLE_CACHE_KEY = "table:squad_rules"
 CAREER_PERSONS_TABLE_CACHE_KEY = "table:career_persons"
 CAREER_HONOURS_TABLE_CACHE_KEY = "table:career_honours"
 CAREER_CUP_ENTRIES_TABLE_CACHE_KEY = "table:career_cup_entries"
@@ -1946,6 +1953,72 @@ class Save:
         self._enforce_checks((colour_check,))
         self._store_reader_checks((colour_check,))
         return Table(rows, ClubColours)
+
+    def squad_rules(self) -> Table[SquadRuleSet]:
+        """Every squad registration rule set the save's rules database holds, in stored order.
+
+        A set is one nation's named group of squad rules (foreign and non-EU limits, home-grown
+        quotas, squad sizes), with the competitions it governs: the one it names outright, the
+        competition at each division level it covers, and the groups of a level split into
+        groups. The rules are database content: the same for whichever club is managed, though
+        a database update can change them. Each nation stores its sets twice, and the second
+        copy is dropped. To ask what governs one league, use `competition_squad_rules`.
+
+        The table is read on the first call; later calls return the same table.
+
+        Raises:
+            SaveClosedError: The save is closed.
+            SaveChangedError: The file changed on disk after it was opened.
+            CorruptSaveError: The save is damaged or was being written.
+
+        Warns:
+            ReaderCheckWarning: On a full-size save, fewer rule-set lists were tied to their
+                nation's division levels than the checks allow. A save opened with strict=True
+                raises ReaderCheckError instead.
+        """
+        context = self._context
+        return context.cached(SQUAD_RULES_TABLE_CACHE_KEY, self._read_squad_rules)
+
+    def _read_squad_rules(self) -> Table[SquadRuleSet]:
+        context = self._context
+        save_info = context.info
+        gate_bounds = self._gate_bounds()
+        layout = find_squad_rule_layout(
+            save_info.section_schemas.get(GAME_DB_SECTION), save_info.build
+        )
+        with context.section(GAME_DB_SECTION) as game_db:
+            game_db_bytes = len(game_db)
+            rows, stats = read_squad_rules(game_db, layout)
+        rule_check = _checks.check_squad_rules(stats, gate_bounds, game_db_bytes)
+        self._enforce_checks((rule_check,))
+        self._store_reader_checks((rule_check,))
+        return Table(rows, SquadRuleSet)
+
+    def competition_squad_rules(self, database_id: int) -> tuple[SquadRuleMatch, ...]:
+        """The squad rule sets that govern one competition, by its editor database id.
+
+        `Competition.database_id` is the id to pass; a league table's competition reaches it
+        through `competitions()`. Sets naming the competition outright come first, then those
+        covering its division level, then those covering the level it is a group of (a
+        heuristic link: see `SquadRuleSet.group_database_ids`); within each, the set with the
+        narrowest division range first. When several sets reach one league, which one the game
+        applies is not confirmed; the narrowest is the likely one. A competition no set
+        reaches, such as most cups, gives an empty tuple. Pass a season to
+        `SquadRuleSet.rules_in` to keep only the rules in force that season.
+
+        Türkiye's 2. League Red Group, a group of division level 2, matched by GROUP::
+
+            for match in career_save.competition_squad_rules(463486):
+                for rule in match.rule_set.rules_in(2025):
+                    print(rule.kind.label.name, rule.bound.label.name, rule.value)
+            # FOREIGN_PLAYERS MAXIMUM 0, ...
+
+        Raises:
+            SaveClosedError: The save is closed.
+            SaveChangedError: The file changed on disk after it was opened.
+            CorruptSaveError: The save is damaged or was being written.
+        """
+        return match_competition(self.squad_rules(), database_id)
 
     def job_vacancies(self) -> Table[JobVacancy]:
         """Every open job the save's job-centre feed holds, in stored order.

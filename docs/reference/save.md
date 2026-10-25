@@ -15,7 +15,8 @@ runs every reader at once and reports how each fared, without raising or warning
 .. autoclass:: fmsave.Save
    :members: info, closed, clubs, club_colours, players, contracts, suspensions, managed_clubs, stages,
        competitions, fixtures, stadiums, transfer_windows, injury_types, injuries, affiliates,
-       job_vacancies, league_tables, competition_rules, player_match_stats,
+       job_vacancies, league_tables, competition_rules, squad_rules, competition_squad_rules,
+       player_match_stats,
        player_season_stats, finances, sponsorships, facilities, staff, staff_lists, tactics,
        set_pieces, training, mentoring, career_persons, career_honours, career_cup_entries,
        career_awards, career_league_history, career_best_eleven, history_people, league_history_clubs, league_history_table, club_league_history, club_cup_history, history_person_reference, history_player_references,

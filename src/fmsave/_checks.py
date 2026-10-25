@@ -58,6 +58,7 @@ from fmsave._reader_stats import (
     ResultStats,
     RulesStats,
     SeasonStatsStats,
+    SquadRuleStats,
     StadiumStats,
     StaffStats,
     StageStats,
@@ -109,6 +110,7 @@ SPONSORSHIPS_READER = "sponsorships"
 FACILITIES_READER = "facilities"
 AFFILIATES_READER = "affiliates"
 CLUB_COLOURS_READER = "club_colours"
+SQUAD_RULES_READER = "squad_rules"
 JOB_VACANCIES_READER = "job_vacancies"
 STADIUMS_READER = "stadiums"
 STAFF_READER = "staff"
@@ -1821,6 +1823,43 @@ def check_club_colours(
         stats.placed,
         evaluate_club_colours(stats, bounds, game_db_bytes),
         FrozenMapping({"unplaced_kit_lists": stats.kit_lists - stats.placed}),
+    )
+
+
+def evaluate_squad_rules(
+    stats: SquadRuleStats, bounds: GateBounds, game_db_bytes: int
+) -> tuple[GateResult, ...]:
+    """The squad-rule reader's one check: the share of levelled rule-set lists tied to a nation.
+
+    The sets themselves are read by the stream's own grammar, so what can go wrong unseen is
+    the link to the nation's division levels, which every league match rests on. It applies on
+    a full-size save that stores a rule-set list governing division levels.
+    """
+    applied = _applies(bounds, game_db_bytes) and stats.levelled_set_lists > 0
+    return (
+        _gate(
+            "squad_rule_lists_paired",
+            _rate(stats.levelled_set_lists_paired, stats.levelled_set_lists),
+            bounds.squad_rule_lists_paired,
+            applied,
+        ),
+    )
+
+
+def check_squad_rules(stats: SquadRuleStats, bounds: GateBounds, game_db_bytes: int) -> ReaderCheck:
+    """The squad-rule reader's check, row count and anomaly counts."""
+    return ReaderCheck(
+        SQUAD_RULES_READER,
+        stats.sets,
+        evaluate_squad_rules(stats, bounds, game_db_bytes),
+        FrozenMapping(
+            {
+                "unpaired_levelled_set_lists": (
+                    stats.levelled_set_lists - stats.levelled_set_lists_paired
+                ),
+                "rules_with_unlabelled_kinds": stats.unknown_kinds,
+            }
+        ),
     )
 
 

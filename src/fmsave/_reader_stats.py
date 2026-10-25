@@ -716,6 +716,25 @@ class ClubColourStats:
 
 
 @dataclass(frozen=True, slots=True)
+class SquadRuleStats:
+    """What the squad-rule pass counted.
+
+    `set_lists` counts the arrays of rule-set records found, `levelled_set_lists` those with a
+    set that governs division levels (every nation's list; the continental lists have none),
+    and `levelled_set_lists_paired` those tied to a nation's division levels. `sets` and
+    `rules` count the rows and rules kept after repeated copies were dropped, and
+    `unknown_kinds` the rules whose code carries no label.
+    """
+
+    set_lists: int
+    levelled_set_lists: int
+    levelled_set_lists_paired: int
+    sets: int
+    rules: int
+    unknown_kinds: int
+
+
+@dataclass(frozen=True, slots=True)
 class JobVacancyStats:
     """What reading the job-centre feed counted.
 
