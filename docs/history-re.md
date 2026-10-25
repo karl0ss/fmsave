@@ -2137,6 +2137,51 @@ for league positions, honours, cup runs, awards, manager spells exist):
    club-award rows), tc_record_man (22 MB live-updating records, semantics
    unconfirmed — own project), tc_history_dt, tc_extended_club_records_history_dt.
 
+## Squad registration rules (foreign / non-EU / home-grown) — FOUND, not integrated (2026-10-25; scratch `fm26-career/tmp_rules/`)
+
+Owner request: per-league squad-registration rules for a transfer-target tool. Not
+history, but it lives in `game_db`, so the notes sit here. Upstream's `readers/rules.py`
+docstring records its failed attempt (tagged groups found, no competition link); the
+routes below are different and do link.
+
+- **Tagged-stream grammar, corrected.** `<4-byte tag reversed><01><type><value>`, but the
+  tag may be binary (e.g. `03 00 00 00`), and value sizes are: `0x00` none, `0x03` and
+  `0x11` 1 byte, `0x12` 2, `0x01` `0x02` `0x20` 4, `0x0F` and `0x18` 8 (`0x0F` = two u32,
+  the second a database id), `0x1A` `u32 len` + UTF-8. `0x0A` = record of N *tagged*
+  fields; `0x0B` = array of N *untagged* elements (`<01><type><value>`). The layout's
+  `u32_types` (0x03, 0x0F as u32) is wrong for this region. Unknown so far: `0x19`, `0x05`.
+- **Rules files.** Each database rules file is framed by a header
+  `EdBr / EdDt / Bran / PLgn / file:'<name>' / XSvC` and its body follows `file`. A nation's
+  `<nat>_rules` file (also `<nat>_reserve_comps`) holds `fxrl:0b` = the named squad-rule
+  sets, then a binary-tagged record holding `nati{Nnat=nation id}` and
+  `dvlv:0b` = division levels, element i = level i's competition database id
+  (Turkey: 0 = 130286 Super League, 1 = 463479 1. League, 2 = 463481 2. League; `nccc` = 2
+  groups). A set's `hidl`/`lwdl` (highest/lowest division level, 255 = open-ended) selects
+  the levels it governs, so set → competitions is a join.
+- **A set**: `name`, `hidl`, `lwdl`, `sqsv`, `usqn`, `tcpf`, `sseg`, `snrp` (registration
+  deadline etc.), `sqsr:0b` = the rules. **A rule**: `type` (code), `cmty` (1 = minimum,
+  255 = maximum: matches the game's paired "Minimum of N …" / "Maximum of N …" text),
+  `valu`, optional `GmTy`, `styr`/`enyr` (valid seasons), `info` (flag fourccs), `cash`/`curr`
+  for money rules.
+- **Codes pinned by real-world rules** (calibration, not yet screenshot-confirmed):
+  9 = max squad size (EPL/La Liga/Serie A 25, Turkey 28); 18 = max non-EU (La Liga 3,
+  Ligue 1 4); 21 = max foreign (Super League 14, Turkish 2. League **0**); 146 = min
+  home-grown (EPL 8); 38/39 = min club-/association-trained (Bundesliga 4/8, Serie A 39 = 8);
+  212 = min nationals (Bundesliga 12). ~168 distinct codes in use; the rest open.
+- **Ruled out: labelling codes from `languages.fmf`.** Decompressed (204,707 zstd frames,
+  838 MB; stream in 1 MB chunks, slicing per frame is quadratic) — the max/min/label triples
+  exist (e.g. "Maximum of [%number#1] foreign players on full-time contract") but the table
+  is ordered by string id, not rule code, and the code→string map is in native code.
+- **Database content, not career state**, but it moves with the database build: the
+  English save (build 1442) and the Turkish save (1447) differ in 72 of 90 shared files.
+  In the English save several nations' rules (eng, esp, fra, tur, …) have **no `file`
+  header** — `eng`'s sets sit in an `fxrl` of 28 (16 named + 12 unnamed) right before
+  `file:'eng_comps'`, so attributing a set by the nearest preceding `file` is WRONG there.
+- **Next:** attribute sets by the object's own nation record (`nati`/`Nnat`) and `dvlv`,
+  not by file name; pin more codes (in-game Rules screen for TFF 2. Lig / Süper Lig /
+  EPL as calibration); then model + reader + `Save.squad_rules()`; nation-level EU/work
+  permit membership is a separate nations reader (none exists yet).
+
 ## Names from the game install (2026-10-10; scratch `fm26-career/extract_names.py`)
 
 fmsave ships no names and reads no game install by design; it takes a
