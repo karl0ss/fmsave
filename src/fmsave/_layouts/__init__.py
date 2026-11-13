@@ -32,6 +32,22 @@ class GameInfoLayout:
 
 
 @dataclass(frozen=True, slots=True)
+class GameInfoVersionLayout:
+    """The game and build of a save whose `save_game_summary` holds no version string (FM24).
+
+    The length-prefixed database version string at `db_version_length_offset` must fully match
+    `db_version_pattern`, whose first three groups are the major, minor and patch numbers. The
+    u32 at `saved_by_build_offset_after_db_version`, counted from the end of that string, is the
+    build number that saved the file.
+    """
+
+    db_version_pattern: str
+    db_version_length_offset: int
+    max_db_version_bytes: int
+    saved_by_build_offset_after_db_version: int
+
+
+@dataclass(frozen=True, slots=True)
 class SaveSummaryLayout:
     """Version detection and the structured date in `save_game_summary`.
 
@@ -945,6 +961,8 @@ class FixtureCalendarLayout:
     cache_next_tag_bytes: int
     cache_next_constant_offset: int
     cache_next_constant: bytes
+    # The width of the unknown field at `r39_42_offset`: 4 bytes in FM26, 3 in FM24.
+    r39_42_bytes: int = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -2359,6 +2377,7 @@ class GateBounds:
 
 type Layout = (
     GameInfoLayout
+    | GameInfoVersionLayout
     | SaveSummaryLayout
     | SummaryStringsLayout
     | NamePoolLayout
@@ -2429,9 +2448,9 @@ class _BuildModule(Protocol):
 
 
 def _build_modules() -> tuple[_BuildModule, ...]:
-    from fmsave._layouts import fm26_26_1_0, fm26_26_3_2
+    from fmsave._layouts import fm24_24_3_0, fm26_26_1_0, fm26_26_3_2
 
-    return (fm26_26_3_2, fm26_26_1_0)
+    return (fm26_26_3_2, fm26_26_1_0, fm24_24_3_0)
 
 
 def registered_layouts() -> tuple[LayoutEntry, ...]:

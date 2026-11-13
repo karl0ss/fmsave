@@ -23,6 +23,11 @@ Layouts here were reverse-engineered on one save (`Karl Hudgell -
 UnemployedNew.fm`, build 26.3.2, an FM24 career imported into FM26) and are not
 verified across builds. The row reads are a pattern scan, so records a changed
 build does not cover are missed rather than misread.
+
+An FM24 section (schema 32) stores the same grid in 77-byte rows: the head word ends
+in 06, not 07, the fields sit where FM26 keeps them, and the unset tail is four bytes
+longer. Its rows also carry 0, not 0xffffffff, in the loan-row field (`value_d`) on
+the rows compared with the same career's FM26 save.
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ import re
 import struct
 import sys
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import date
 
 from fmsave._errors import CorruptSaveError
@@ -62,6 +68,35 @@ _ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 
 # The row's head word is `00 <u8 variant> <u8 variant> 07`.
 _ROW_HEAD = re.compile(b"\x00[\x00\x01][\x00\x01]\x07")
+
+# The FM24 grid: the same row with a longer unset tail and a head word ending in 06.
+_FM24_SCHEMA = 32
+_FM24_ROW_LENGTH = 77
+_FM24_ROW_FORMAT = struct.Struct("<4sIBIBIBI8sIBHHHIIII19s")
+assert _FM24_ROW_FORMAT.size == _FM24_ROW_LENGTH
+_FM24_ROW_HEAD = re.compile(b"\x00[\x00\x01][\x00\x01]\x06")
+_SCHEMA_OFFSET = 6
+
+
+@dataclass(frozen=True, slots=True)
+class _RowShape:
+    head: re.Pattern[bytes]
+    length: int
+    format: struct.Struct
+
+
+_FM26_ROWS = _RowShape(_ROW_HEAD, _ROW_LENGTH, _ROW_FORMAT)
+_FM24_ROWS = _RowShape(_FM24_ROW_HEAD, _FM24_ROW_LENGTH, _FM24_ROW_FORMAT)
+
+
+def _row_shape(data: bytes) -> _RowShape:
+    """The FM24 rows for an FM24 section (by its schema number), FM26's otherwise."""
+    if len(data) >= _SCHEMA_OFFSET + 2:
+        (schema,) = struct.unpack_from("<H", data, _SCHEMA_OFFSET)
+        if schema == _FM24_SCHEMA:
+            return _FM24_ROWS
+    return _FM26_ROWS
+
 
 # The row's date sits at this offset: the u16 day word, then the u16 year.
 _ROW_DATE_OFFSET = 36
@@ -110,19 +145,21 @@ def _season_year_ok(year: int) -> bool:
     return year == _NULL_YEAR or _YEAR_MIN <= year <= _YEAR_MAX
 
 
-def _row(bytes_at: bytes, offset: int) -> PlayerSeasonRecord | None:
-    """The record the 73 bytes at `offset` hold, or None they hold no row.
+def _row(bytes_at: bytes, offset: int, shape: _RowShape = _FM26_ROWS) -> PlayerSeasonRecord | None:
+    """The record the row at `offset` holds (73 bytes, 77 in FM24), or None it holds no row.
 
-    A row is `00 <u8 variant> <u8 variant> 07` plus three zero null-separators
-    around its team fields, a season year inside the layout's bounds, and unset
-    sentinels where null.
+    A row is `00 <u8 variant> <u8 variant> 07` (06 in FM24) plus three zero
+    null-separators around its team fields, a season year inside the layout's bounds,
+    and unset sentinels where null.
     """
     head = bytes_at[offset : offset + 4]
-    if not _ROW_HEAD.match(head):
+    if not shape.head.match(head):
+        return None
+    if offset + shape.length > len(bytes_at):
         return None
     if bytes_at[offset + 8] != 0 or bytes_at[offset + 13] != 0 or bytes_at[offset + 18] != 0:
         return None
-    record = _ROW_FORMAT.unpack(bytes_at[offset : offset + _ROW_LENGTH])
+    record = shape.format.unpack(bytes_at[offset : offset + shape.length])
     year = record[12]
     if not _season_year_ok(year):
         return None
@@ -163,7 +200,8 @@ def decode_player_season_records(data: bytes) -> tuple[PlayerSeasonRecord, ...]:
         position = data.find(_ZSTD_MAGIC, position + 4)
 
     clear_end = frame_positions[0] if frame_positions else len(data)
-    records: list[PlayerSeasonRecord] = _region_rows(data, _HEADER_SIZE, clear_end)
+    shape = _row_shape(data)
+    records: list[PlayerSeasonRecord] = _region_rows(data, _HEADER_SIZE, clear_end, shape)
     index = 0
     while index < len(frame_positions):
         frame_start = frame_positions[index]
@@ -180,14 +218,16 @@ def decode_player_season_records(data: bytes) -> tuple[PlayerSeasonRecord, ...]:
                 break
             next_index += 1
         if frame_bytes is not None:
-            records.extend(_region_rows(frame_bytes, 0, len(frame_bytes)))
+            records.extend(_region_rows(frame_bytes, 0, len(frame_bytes), shape))
         # A retry that extended the segment over false magics consumed more than
         # one of the frame positions; otherwise only this frame is done.
         index = max(index + 1, next_index)
     return tuple(records)
 
 
-def _region_rows(bytes_at: bytes, start: int, limit: int) -> list[PlayerSeasonRecord]:
+def _region_rows(
+    bytes_at: bytes, start: int, limit: int, shape: _RowShape = _FM26_ROWS
+) -> list[PlayerSeasonRecord]:
     """The rows a season region carries, read at every head-word match.
 
     Rows butt at stride 73 inside the store's tables, with other data (story
@@ -196,9 +236,9 @@ def _region_rows(bytes_at: bytes, start: int, limit: int) -> list[PlayerSeasonRe
     misses the row's bounds is not a row.
     """
     records_by_position: dict[int, PlayerSeasonRecord] = {}
-    for head_at in _ROW_HEAD.finditer(bytes_at, start, limit):
+    for head_at in shape.head.finditer(bytes_at, start, limit):
         position = head_at.start()
-        record = _row(bytes_at, position)
+        record = _row(bytes_at, position, shape)
         if record is not None:
             records_by_position[position] = record
     return [records_by_position[position] for position in sorted(records_by_position)]

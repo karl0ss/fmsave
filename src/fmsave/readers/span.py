@@ -433,7 +433,11 @@ def _fixture_search(layout: FixtureCalendarLayout, clock_year: int) -> _FixtureS
         (layout.phase_offset, "B", "phase"),
         (layout.leg_offset, "B", "leg"),
         (layout.round_index_offset, "B", "round_index"),
-        (layout.r39_42_offset, "I", "r39_42"),
+        (
+            layout.r39_42_offset,
+            "I" if layout.r39_42_bytes == _UINT32.size else f"{layout.r39_42_bytes}s",
+            "r39_42",
+        ),
         (layout.match_rules_template_offset, template_code, "match_rules_template"),
         (layout.r47_54_offset, "Q", "r47_54"),
         (layout.played_offset, "B", "played"),
@@ -624,10 +628,15 @@ def _raw_fixture(values: tuple[Any, ...], absolute: int, search: _FixtureSearch)
         date2=values[search.date2_index],
         phase=values[search.phase_index],
         leg=values[search.leg_index],
-        r39_42=values[search.r39_42_index],
+        r39_42=_as_int(values[search.r39_42_index]),
         match_rules_template=(template[0], template[1], template[2]),
         r47_54=values[search.r47_54_index],
     )
+
+
+def _as_int(value: int | bytes) -> int:
+    """A field read as an int, or as bytes when the layout gives it an odd width."""
+    return value if isinstance(value, int) else int.from_bytes(value, "little")
 
 
 def _collect_fixtures(

@@ -29,6 +29,7 @@ from fmsave._frozen import FrozenMapping
 from fmsave._layouts import (
     FALLBACK_BUILD,
     GameInfoLayout,
+    GameInfoVersionLayout,
     SaveSummaryLayout,
     SummaryStringsLayout,
     find_layout,
@@ -48,7 +49,8 @@ from fmsave.models.meta import SaveInfo, SectionInfo
 from fmsave.readers._common import SAVE_SUMMARY_SECTION
 from fmsave.readers.managed import read_summary_strings
 
-SUPPORTED_GAME_MAJOR = 26
+SUPPORTED_GAME_MAJORS = (24, 26)
+SUPPORTED_GAMES_TEXT = "Football Manager 24 and 26"
 SECTION_MAGIC_PREFIX = b"\x03\x01"
 SECTION_HEAD_BYTES = 8
 SCHEMA_OFFSET = 6
@@ -111,8 +113,49 @@ def find_game_version(summary: bytes, layout: SaveSummaryLayout, file_name: str)
             build_number=int(version_match.group(4)),
         )
     raise UnsupportedGameError(
-        f"{file_name}: no game version found. fmsave reads Football Manager 26 saves; for other versions see {ISSUES_URL}"
+        f"{file_name}: no game version found. fmsave reads {SUPPORTED_GAMES_TEXT} saves; for other versions see {ISSUES_URL}"
     )
+
+
+def find_game_info_version(container_index: ContainerIndex) -> GameVersion | None:
+    """The game and build from `game_info`, for saves whose summary holds no version (FM24).
+
+    Only layouts registered for the section's own schema are tried; None when none fits.
+    """
+    game_info = read_section(container_index, GAME_INFO_SECTION)
+    schema = section_schema(
+        game_info,
+        container_index.sections[GAME_INFO_SECTION].extension,
+        GAME_INFO_SECTION,
+        container_index.file_name,
+    )
+    for entry in registered_layouts():
+        layout = entry.layout
+        if (
+            entry.region != GAME_INFO_SECTION
+            or entry.schema != schema
+            or not isinstance(layout, GameInfoVersionLayout)
+        ):
+            continue
+        try:
+            db_version, version_end = read_length_prefixed_string(
+                game_info, layout.db_version_length_offset, layout.max_db_version_bytes
+            )
+            build_number = read_u32(
+                game_info, version_end + layout.saved_by_build_offset_after_db_version
+            )
+        except CorruptSaveError:
+            continue
+        version_match = re.fullmatch(layout.db_version_pattern, db_version)
+        if version_match is None or build_number == 0:
+            continue
+        major, minor, patch = version_match.group(1, 2, 3)
+        return GameVersion(
+            major=int(major),
+            build=f"{major}.{minor}.{patch}+{build_number}",
+            build_number=build_number,
+        )
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,7 +206,11 @@ def read_summary_clock(
 
 
 def read_summary_facts(container_index: ContainerIndex) -> SummaryFacts:
-    """Read the summary's version, strings and fallback date once, rejecting games other than FM26."""
+    """Read the summary's version, strings and fallback date once, rejecting unsupported games.
+
+    An FM24 summary holds no version string; the version then comes from `game_info`, and the
+    summary gives no strings or date.
+    """
     file_name = container_index.file_name
     summary = read_section(container_index, SAVE_SUMMARY_SECTION)
     summary_schema = section_schema(
@@ -173,11 +220,17 @@ def read_summary_facts(container_index: ContainerIndex) -> SummaryFacts:
         file_name,
     )
     summary_layout = find_layout(SaveSummaryLayout, SAVE_SUMMARY_SECTION, summary_schema, "").layout
-    version = find_game_version(summary, summary_layout, file_name)
-    if version.major != SUPPORTED_GAME_MAJOR:
+    try:
+        version = find_game_version(summary, summary_layout, file_name)
+    except UnsupportedGameError:
+        game_info_version = find_game_info_version(container_index)
+        if game_info_version is None:
+            raise
+        return SummaryFacts(game_info_version, (), None)
+    if version.major not in SUPPORTED_GAME_MAJORS:
         raise UnsupportedGameError(
-            f"{file_name} is an {version.game} save ({version.build}). fmsave {__version__} reads FM26 saves "
-            f"only; {version.game} is not supported yet. See {ISSUES_URL}"
+            f"{file_name} is an {version.game} save ({version.build}). fmsave {__version__} reads "
+            f"{SUPPORTED_GAMES_TEXT} saves only; {version.game} is not supported yet. See {ISSUES_URL}"
         )
     strings_layout = find_layout(
         SummaryStringsLayout, SAVE_SUMMARY_SECTION, summary_schema, ""
@@ -384,7 +437,7 @@ def read_save_info(container_index: ContainerIndex) -> SaveInfo:
     if not known_build:
         warnings.warn(
             UnknownBuildWarning(
-                f"{file_name} was saved by FM26 build {version.build}, which fmsave {__version__} has no "
+                f"{file_name} was saved by {version.game} build {version.build}, which fmsave {__version__} has no "
                 "full set of layouts for. Metadata is checked against observed layouts; "
                 f"other readers use the {FALLBACK_BUILD} layouts where it has none of its own. "
                 "Readers check their results and raise ReaderCheckError if they do not fit."

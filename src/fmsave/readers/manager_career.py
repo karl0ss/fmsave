@@ -45,6 +45,13 @@ Draws are stored nowhere: the game shows games minus wins minus losses. The layo
 was reverse-engineered on one save (`Karl Hudgell - UnemployedNew.fm`, build 26.3.2)
 and is not verified across builds; the slots on a save started in FM26 (5,631
 records: 3,235 men's only, 1,776 men's and women's, 458 women's only, 162 neither).
+
+FM24 (section schema 27) has no slots: every record is 358 bytes, butted to the trailer,
+with the same fields in another order (`_FM24_*` below). Its reference is stored again at
++89. The offsets were measured on the FM24 save of the same career as the FM26 ground
+truth: of 11,652 people in both saves, every field below matches the FM26 value on most
+records (the rest are managers whose figures changed in the months played since), and no
+other offset matches as often.
 """
 
 from __future__ import annotations
@@ -120,6 +127,63 @@ _JOB_AWARDS_AT = 330
 _JOB_BOUGHT_AT = 332
 _JOB_SOLD_AT = 336
 _JOB_RELEASED_AT = 338
+
+# FM24 records (schema 27): one fixed layout, no slots.
+FM24_SCHEMA = 27
+FM24_RECORD_BYTES = 358
+_SCHEMA_OFFSET = 6
+_FM24_REFERENCE_COPY_AT = 89
+_FM24_PAID_AT = 4
+_FM24_RECEIVED_AT = 27
+_FM24_JOB_SPELL_AT = 50
+_FM24_SPELLS_AT = (63, 76, 293, 306)
+_FM24_CUPS_AT = 93
+_FM24_LEAGUE_TITLES_AT = 95
+_FM24_GAMES_AT = 97
+_FM24_WINS_AT = 99
+_FM24_LOSSES_AT = 101
+_FM24_GOALS_FOR_AT = 103
+_FM24_GOALS_AGAINST_AT = 107
+_FM24_AWARDS_AT = 111
+_FM24_BOUGHT_AT = 113
+_FM24_SOLD_AT = 115
+_FM24_SPENT_AT = 117
+_FM24_RECEIVED_MONEY_AT = 125
+_FM24_CLUB_JOBS_AT = 133
+_FM24_NATIONAL_JOBS_AT = 138
+_FM24_JOB_CUPS_AT = 164
+_FM24_JOB_LEAGUE_TITLES_AT = 166
+_FM24_JOB_GAMES_AT = 168
+_FM24_JOB_WINS_AT = 170
+_FM24_JOB_LOSSES_AT = 172
+_FM24_JOB_GOALS_FOR_AT = 174
+_FM24_JOB_GOALS_AGAINST_AT = 178
+_FM24_JOB_AWARDS_AT = 182
+_FM24_JOB_BOUGHT_AT = 184
+_FM24_JOB_SOLD_AT = 186
+_FM24_JOB_SPENT_AT = 188
+_FM24_JOB_RECEIVED_MONEY_AT = 196
+_FM24_JOB_RECEIVED_AT = 234
+_FM24_JOB_PAID_AT = 257
+_FM24_JOB_RELEASED_AT = 324
+_FM24_RELEASED_AT = 326
+_FM24_AGENT_FEES_AT = 328
+# The FM26 unknown words found in FM24 records, by FM26 key. word_161, word_169 and
+# word_340 matched no FM24 offset and are left out.
+_FM24_UNKNOWN_WORDS = (
+    ("word_151", 336),
+    ("word_153", 338),
+    ("word_155", 340),
+    ("word_157", 342),
+    ("word_159", 344),
+    ("word_171", 346),
+    ("word_173", 348),
+    ("word_175", 350),
+    ("word_177", 352),
+    ("word_195", 319),
+    ("word_197", 321),
+    ("word_318", 159),
+)
 
 _UNKNOWN_WORD_OFFSETS = tuple(
     int(key.removeprefix("word_")) for key in ManagerCareerRecord.UNKNOWN_KEYS
@@ -313,6 +377,8 @@ def locate_manager_career_records(data: bytes) -> tuple[int, ...]:
             f"({len(data)} bytes, tail {data[-4:].hex()}): the record layout has moved"
         )
     end = len(data) - len(TRAILER)
+    if _is_fm24(data):
+        return _locate_fm24_records(data, end)
     for match in _RECORD_HEAD.finditer(data, 0, end):
         offsets = _walk(data, match.start(), end)
         if offsets is not None:
@@ -353,4 +419,93 @@ def _canonical(head: bytes, block: bytes, tail: bytes) -> bytes:
 
 def decode_manager_career_records(data: bytes) -> tuple[ManagerCareerRecord, ...]:
     """Every career record in the section, in file order."""
+    if _is_fm24(data):
+        return tuple(
+            decode_fm24_manager_career_record(data[offset : offset + FM24_RECORD_BYTES])
+            for offset in locate_manager_career_records(data)
+        )
     return tuple(_decode_at(data, offset) for offset in locate_manager_career_records(data))
+
+
+def _is_fm24(data: bytes) -> bool:
+    return len(data) >= _SCHEMA_OFFSET + 2 and _u16(data, _SCHEMA_OFFSET) == FM24_SCHEMA
+
+
+def _locate_fm24_records(data: bytes, end: int) -> tuple[int, ...]:
+    """FM24 records run back to back up to `end`: walk back while the stored reference
+    is set and repeated at +89."""
+    offsets: list[int] = []
+    position = end - FM24_RECORD_BYTES
+    while position >= 0:
+        reference = _u32(data, position)
+        if reference in (0, _UNSET) or _u32(data, position + _FM24_REFERENCE_COPY_AT) != reference:
+            break
+        offsets.append(position)
+        position -= FM24_RECORD_BYTES
+    return tuple(reversed(offsets))
+
+
+def _fm24_current_job(record: bytes) -> ManagerCurrentJob | None:
+    job = _spell(record, _FM24_JOB_SPELL_AT)
+    if job is None:
+        return None
+    games = _u16(record, _FM24_JOB_GAMES_AT)
+    wins = _u16(record, _FM24_JOB_WINS_AT)
+    losses = _u16(record, _FM24_JOB_LOSSES_AT)
+    return ManagerCurrentJob(
+        team_id=job.team_id,
+        start_date=job.start_date,
+        highest_fee_paid=_career_fee(record, _FM24_JOB_PAID_AT),
+        highest_fee_received=_career_fee(record, _FM24_JOB_RECEIVED_AT),
+        money_spent=_u64(record, _FM24_JOB_SPENT_AT),
+        money_received=_u64(record, _FM24_JOB_RECEIVED_MONEY_AT),
+        goals_for=_u32(record, _FM24_JOB_GOALS_FOR_AT),
+        goals_against=_u32(record, _FM24_JOB_GOALS_AGAINST_AT),
+        games=games,
+        wins=wins,
+        draws=games - wins - losses,
+        losses=losses,
+        cups=_u16(record, _FM24_JOB_CUPS_AT),
+        league_titles=_u16(record, _FM24_JOB_LEAGUE_TITLES_AT),
+        awards=_u16(record, _FM24_JOB_AWARDS_AT),
+        players_bought=_u16(record, _FM24_JOB_BOUGHT_AT),
+        players_sold=_u16(record, _FM24_JOB_SOLD_AT),
+        players_released=_u16(record, _FM24_JOB_RELEASED_AT),
+    )
+
+
+def decode_fm24_manager_career_record(record: bytes) -> ManagerCareerRecord:
+    """One 358-byte FM24 record (see the module notes)."""
+    games = _u16(record, _FM24_GAMES_AT)
+    wins = _u16(record, _FM24_WINS_AT)
+    losses = _u16(record, _FM24_LOSSES_AT)
+    spells = [_spell(record, offset) for offset in _FM24_SPELLS_AT]
+    return ManagerCareerRecord(
+        reference=_u32(record, 0),
+        highest_fee_paid=_career_fee(record, _FM24_PAID_AT),
+        highest_fee_received=_career_fee(record, _FM24_RECEIVED_AT),
+        longest_club_spell=spells[0],
+        shortest_club_spell=spells[1],
+        longest_national_spell=spells[2],
+        shortest_national_spell=spells[3],
+        money_spent=_u64(record, _FM24_SPENT_AT),
+        money_received=_u64(record, _FM24_RECEIVED_MONEY_AT),
+        agent_fees=_u64(record, _FM24_AGENT_FEES_AT),
+        goals_for=_u32(record, _FM24_GOALS_FOR_AT),
+        goals_against=_u32(record, _FM24_GOALS_AGAINST_AT),
+        games=games,
+        wins=wins,
+        draws=games - wins - losses,
+        losses=losses,
+        cups=_u16(record, _FM24_CUPS_AT),
+        league_titles=_u16(record, _FM24_LEAGUE_TITLES_AT),
+        awards=_u16(record, _FM24_AWARDS_AT),
+        players_bought=_u16(record, _FM24_BOUGHT_AT),
+        players_sold=_u16(record, _FM24_SOLD_AT),
+        players_released=_u16(record, _FM24_RELEASED_AT),
+        club_jobs=record[_FM24_CLUB_JOBS_AT],
+        national_jobs=record[_FM24_NATIONAL_JOBS_AT],
+        current_job=_fm24_current_job(record),
+        womens_career=None,
+        unknown=FrozenMapping({key: _u16(record, offset) for key, offset in _FM24_UNKNOWN_WORDS}),
+    )

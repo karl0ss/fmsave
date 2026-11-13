@@ -141,11 +141,22 @@ def decode_hall_of_fame(data: bytes) -> tuple[tuple[PersonHistory, ...], tuple[H
     return decode_persons(data), decode_honour_rows(data)
 
 
+# Honours row shapes: (pattern at the node id, offset of the count, offset of the season),
+# both offsets from the node id. FM26 stores the node as u32 765 followed by 02 00; FM24
+# stores it as u16 139 followed by 02 and a byte of 00 or 01, two bytes shorter.
+_HONOUR_ROW_SHAPES = (
+    (re.compile(rb"\xfd\x02\x00\x00\x02\x00"), 6, 13),
+    (re.compile(rb"\x8b\x00\x02[\x00\x01]"), 4, 11),
+)
+
+
 def decode_honour_rows(data: bytes) -> tuple[Honour, ...]:
     """Every honours row in the hall of fame bytes, whether or not a person block is near.
 
-    A row runs `<u32 club> 01 00 <u32 competition> fd 02 00 00 02 00 <u16 count> 01
-    01 00 <u16> <u16 season>`, its season thirteen bytes past its node id. What follows
+    An FM26 row runs `<u32 club> 01 00 <u32 competition> fd 02 00 00 02 00 <u16 count> 01
+    01 00 <u16> <u16 season>`, its season thirteen bytes past its node id; an FM24 row has
+    `8b 00 02 <00|01>` in place of `fd 02 00 00 02 00`, so its season is eleven bytes past
+    (measured on 877 rows found in the FM24 and FM26 saves of one career). What follows
     the season is not one tail the way a strict layout would have it — rows carry
     different bytes there — so the scan stops at the season and keeps a candidate whose
     club and season pass their bounds; the 1900 the history sections use as a null date
@@ -153,32 +164,33 @@ def decode_honour_rows(data: bytes) -> tuple[Honour, ...]:
     """
     honours: list[Honour] = []
     seen: set[tuple[int, int, int]] = set()
-    for match in re.finditer(b"\xfd\x02\x00\x00\x02\x00", data):
-        anchor = match.start()
-        if anchor < 10 or anchor + 15 > len(data):
-            continue
-        if data[anchor - 6 : anchor - 4] != b"\x01\x00":
-            continue
-        club = struct.unpack_from("<I", data, anchor - 10)[0]
-        if club in (0, _NO_CLUB):
-            continue
-        competition = struct.unpack_from("<I", data, anchor - 4)[0]
-        count = struct.unpack_from("<H", data, anchor + 6)[0]
-        season = struct.unpack_from("<H", data, anchor + 13)[0]
-        if not (_MIN_YEAR <= season <= _MAX_YEAR and season != _NULL_YEAR):
-            continue
-        key = (club, competition, season)
-        if key in seen:
-            continue
-        seen.add(key)
-        honours.append(
-            Honour(
-                club_uid=club,
-                competition_id=competition,
-                season=season,
-                count=count,
+    for pattern, count_offset, season_offset in _HONOUR_ROW_SHAPES:
+        for match in pattern.finditer(data):
+            anchor = match.start()
+            if anchor < 10 or anchor + season_offset + 2 > len(data):
+                continue
+            if data[anchor - 6 : anchor - 4] != b"\x01\x00":
+                continue
+            club = struct.unpack_from("<I", data, anchor - 10)[0]
+            if club in (0, _NO_CLUB):
+                continue
+            competition = struct.unpack_from("<I", data, anchor - 4)[0]
+            count = struct.unpack_from("<H", data, anchor + count_offset)[0]
+            season = struct.unpack_from("<H", data, anchor + season_offset)[0]
+            if not (_MIN_YEAR <= season <= _MAX_YEAR and season != _NULL_YEAR):
+                continue
+            key = (club, competition, season)
+            if key in seen:
+                continue
+            seen.add(key)
+            honours.append(
+                Honour(
+                    club_uid=club,
+                    competition_id=competition,
+                    season=season,
+                    count=count,
+                )
             )
-        )
     return tuple(honours)
 
 
