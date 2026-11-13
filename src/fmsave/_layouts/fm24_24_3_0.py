@@ -96,6 +96,31 @@ FIXTURE_CALENDAR = dataclasses.replace(
 # FM26 keeps at +20 is missing, so the annual value sits at +20.
 SPONSOR_CHAINS = dataclasses.replace(fm26.SPONSOR_CHAINS, row_bytes=24, tag=0x01, annual_offset=20)
 
+# `tactics_man` carries FM26's schema number but FM24's own tags: header byte 0C, 3A where
+# FM26 writes 42 (the selection's end marker, the record signature, the slot tag), three
+# flag bytes in front of the set-piece marker's 05 02 (FM26 has one), a 01 in front of the
+# order marker, and a byte of 01 after a tactic's name ahead of FM26's twelve zero bytes.
+# Signatures end 00 on the manager's own tactics and 01 on presets; FM24 has no third kind.
+# Names, style labels and mentality read on every team block of the measured save (mentality
+# codes assumed FM26's: the same seven mentalities). FM24 slots are not FM26's in- and
+# out-of-possession pairs, so no slot decodes and every tactic ships without slots.
+TACTICS = dataclasses.replace(
+    fm26.TACTICS,
+    header_marker=0x0C,
+    selection_end_marker=bytes.fromhex("3a00"),
+    taker_markers=(
+        bytes.fromhex("0000000502"),
+        bytes.fromhex("0101000502"),
+        bytes.fromhex("0501040502"),
+    ),
+    order_marker=bytes.fromhex("0108"),
+    user_signature=bytes.fromhex("223a001802000000"),
+    alternate_signature=bytes.fromhex("223a001802000000"),
+    preset_signature=bytes.fromhex("223a001802000001"),
+    name_zero_bytes=13,
+    slot_tag=bytes.fromhex("3a0002"),
+)
+
 LAYOUTS: tuple[LayoutEntry, ...] = (
     LayoutEntry(region="game_info", schema=42, build=BUILD, layout=GAME_INFO),
     LayoutEntry(region="game_info", schema=42, build=BUILD, layout=GAME_INFO_VERSION),
@@ -103,5 +128,6 @@ LAYOUTS: tuple[LayoutEntry, ...] = (
     LayoutEntry(region="game_db", schema=3569, build=BUILD, layout=PLAYER_RECORDS),
     LayoutEntry(region="game_db", schema=3569, build=BUILD, layout=PERSON_BLOCKS),
     LayoutEntry(region="game_db", schema=3569, build=BUILD, layout=SPONSOR_CHAINS),
+    LayoutEntry(region="tactics_man", schema=26, build=BUILD, layout=TACTICS),
     LayoutEntry(region=fm26.SPAN_REGION_NAME, schema=None, build=BUILD, layout=FIXTURE_CALENDAR),
 )

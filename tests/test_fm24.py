@@ -6,7 +6,7 @@ from __future__ import annotations
 import struct
 from datetime import date
 
-from fmsave._layouts import FixtureCalendarLayout, GameInfoLayout, find_layout
+from fmsave._layouts import FixtureCalendarLayout, GameInfoLayout, TacticsLayout, find_layout
 from fmsave._layouts import fm24_24_3_0 as fm24
 from fmsave.readers._common import SPAN_REGION
 from fmsave.readers.career_history import decode_honour_rows
@@ -38,6 +38,8 @@ def test_fm24_layouts_are_found_by_the_fm24_build() -> None:
         3,
         0x18,
     )
+    tactics = find_layout(TacticsLayout, "tactics_man", 26, fm24.BUILD).layout
+    assert tactics is fm24.TACTICS and tactics.header_marker == 0x0C
 
 
 def test_fm24_transfer_rows_are_77_bytes_with_a_06_head() -> None:
